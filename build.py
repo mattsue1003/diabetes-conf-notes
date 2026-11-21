@@ -20,5 +20,37 @@ for v in VIDEOS:
     out.append({**v, **n, "id": v["id"]})
     print(v["id"], len(n["sections"]), "sections")
 
+# Full transcripts (from raw/ captions). Written to transcript.js, which is
+# gitignored: it stays on this computer and is never pushed to the public site.
+import html, re
+# Auto-captions mishear drug/device names; fix the ones we know so search finds them.
+CORRECTIONS = [
+    (r"\bterzepatide\b", "tirzepatide"), (r"\btwin creatins?\b", "twincretin"),
+    (r"\bFiosp\b", "Fiasp"), (r"\bLumgev\b", "Lyumjev"), (r"\bDiaboLoop\b", "Diabeloop"),
+    (r"\bSteady Set\b", "SteadiSet"), (r"\bT-Slim\b", "t:slim"),
+    (r"\bliverox bandan\b", "rivaroxaban"), (r"\bclidography\b", "clopidogrel"), (r"\bsatim\b", "ezetimibe"),
+    (r"\b(?:finan|findrinan|pindan)\b", "finerenone"), (r"\beplesomeap\b", "teplizumab"),
+    (r"\bSinclair sync\b", "Simplera Sync"), (r"\bSimpla\b", "Simplera"), (r"\bSQL MedTech\b", "Sequel MedTech"),
+    (r"(?<!don't )\b[Tt]wist\b", "twiist"), (r"\bBoris Kabach\b", "Boris Kovatchev"),
+    (r"\bEOPump\b", "YpsoPump"), (r"\bFintorio\b", "efsitora"),
+]
+tr = {}
+for v in VIDEOS:
+    rp = ROOT / "raw" / f"{v['id']}.json"
+    if rp.exists():
+        paras = json.loads(rp.read_text(encoding="utf-8"))
+        clean = []
+        for t, txt in paras:
+            txt = html.unescape(txt)
+            for pat, rep in CORRECTIONS:
+                txt = re.sub(pat, rep, txt, flags=re.I if pat.islower() else 0)
+            txt = re.sub(r"\s*>>\s*", " ¶ ", txt)          # speaker change marker
+            txt = re.sub(r"\s+", " ", txt).strip(" ¶")
+            clean.append([t, txt])
+        tr[v["id"]] = clean
+if tr:
+    (ROOT / "transcript.js").write_text("window.TRANSCRIPTS=" + json.dumps(tr, ensure_ascii=False) + ";\n", encoding="utf-8")
+    print("wrote transcript.js:", {k: len(x) for k, x in tr.items()})
+
 (ROOT / "data.js").write_text("window.VIDEOS=" + json.dumps(out, ensure_ascii=False) + ";\n", encoding="utf-8")
 print("wrote data.js with", len(out), "videos")
