@@ -47,6 +47,12 @@ for v in VIDEOS:
             txt = re.sub(r"\s*>>\s*", " ¶ ", txt)          # speaker change marker
             txt = re.sub(r"\s+", " ", txt).strip(" ¶")
             clean.append([t, txt])
+        zp = ROOT / "raw" / f"{v['id']}.zh.json"   # Traditional Chinese translation, same paragraphs
+        if zp.exists():
+            zh = json.loads(zp.read_text(encoding="utf-8"))
+            assert len(zh) == len(clean) and all(z[1] == c[0] for z, c in zip(zh, clean)), f"{zp.name} does not line up"
+            for c, z in zip(clean, zh):
+                c.append(re.sub(r"\s*¶\s*", " ¶ ", z[2]).strip(" ¶"))
         tr[v["id"]] = clean
 if tr:
     (ROOT / "transcript.js").write_text("window.TRANSCRIPTS=" + json.dumps(tr, ensure_ascii=False) + ";\n", encoding="utf-8")

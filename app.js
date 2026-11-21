@@ -45,7 +45,17 @@
   function hl(text, ts) { var s = esc(text); return ts.length ? s.replace(re(ts), '<mark>$1</mark>') : s; }
   function trHtml(text, ts) { return hl(text, ts).replace(/ ?¶ ?/g, '<span class="sp"></span>'); }
 
-  if (!TR) document.querySelectorAll('[data-tr]').forEach(function (e) { e.remove(); });
+  if (!TR) { document.querySelectorAll('[data-tr]').forEach(function (e) { e.remove(); }); $('#fScope').remove(); }
+  // transcript language: zh (default when translated), en, or both
+  var lang = 'zh';
+  try { lang = localStorage.getItem('dcn.lang') || 'zh'; } catch (e) {}
+  function hasZh(p) { return p.length > 2; }
+  function paraHtml(p, ts) {
+    if (!hasZh(p) || lang === 'en') return '<span class="tx">' + trHtml(p[1], ts) + '</span>';
+    if (lang === 'zh') return '<span class="tx">' + trHtml(p[2], ts) + '</span>';
+    return '<span class="tx">' + trHtml(p[2], ts) + '<span class="en">' + trHtml(p[1], ts) + '</span></span>';
+  }
+  function paraText(p) { return p[1] + ' ' + (p[2] || ''); }
 
   // ---------- picker + video filter ----------
   $('#picker').innerHTML = V.map(function (v) {
@@ -101,7 +111,7 @@
   function renderTr() {
     var paras = (TR && TR[cur.id]) || [], ts = terms($('#trq').value);
     $('#trBody').innerHTML = paras.length ? paras.map(function (p, i) {
-      return '<p class="tp" id="p' + i + '">' + tsBtn(cur.id, p[0]) + '<span class="tx">' + trHtml(p[1], ts) + '</span></p>';
+      return '<p class="tp" id="p' + i + '">' + tsBtn(cur.id, p[0]) + paraHtml(p, ts) + '</p>';
     }).join('') : '<p class="empty">這部影片沒有逐字稿。</p>';
     hits = [].slice.call(document.querySelectorAll('#trBody mark'));
     hitIdx = -1;
@@ -223,7 +233,7 @@
     return !f || (f.indexOf('g:') === 0 ? v.group === f.slice(2) : v.id === f);
   }
   function runSearch() {
-    var q = $('#q').value.trim(), scope = $('#fScope').value, ts = terms(q);
+    var q = $('#q').value.trim(), scope = TR ? $('#fScope').value : 'notes', ts = terms(q);
     $('#searchView').classList.toggle('hide', !q);
     $('#videoView').classList.toggle('hide', !!q);
     $('#picker').classList.toggle('hide', !!q);
@@ -231,7 +241,7 @@
     all = []; lastTerms = ts;
     V.filter(inFilter).forEach(function (v) {
       if (scope !== 'notes' && TR && TR[v.id]) TR[v.id].forEach(function (p, i) {
-        if (matches(p[1], ts)) all.push({ kind: 'tr', v: v, t: p[0], p: i, text: p[1] });
+        if (matches(paraText(p), ts)) all.push({ kind: 'tr', v: v, t: p[0], p: i, para: p });
       });
       if (scope === 'tr') return;
       (v.takeaways || []).forEach(function (k) { if (matches(k.text, ts)) all.push({ kind: 'n', v: v, t: k.t, head: '必記重點', text: k.text }); });
@@ -257,7 +267,13 @@
       var head = h.v.id !== prev ? '<div class="src" style="margin-top:6px">' + esc(h.v.group + '｜' + vName(h.v)) + '</div>' : '';
       prev = h.v.id;
       if (h.kind === 'tr') {
-        return '<li>' + head + '<span class="kind tr">逐字稿</span><div class="tx">' + trHtml(h.text, ts) + '</div>' +
+        // show the chosen language; if the hit is only in the other language, show that one too
+        var body = paraHtml(h.para, ts);
+        if (hasZh(h.para) && lang !== 'both') {
+          var other = lang === 'en' ? h.para[2] : h.para[1], shown = lang === 'en' ? h.para[1] : h.para[2];
+          if (!matches(shown, ts)) body = '<span class="tx">' + trHtml(shown, ts) + '<span class="en">' + trHtml(other, ts) + '</span></span>';
+        }
+        return '<li>' + head + '<span class="kind tr">逐字稿</span><div class="tx">' + body + '</div>' +
           '<div class="acts"><button class="ts" data-v="' + h.v.id + '" data-t="' + h.t + '" data-p="' + h.p + '">' + fmt(h.t) + '</button>' +
           '<button class="ctx" data-v="' + h.v.id + '" data-ctx="' + h.p + '">看前後文</button>' + ytA(h.v.id, h.t) + '</div></li>';
       }
@@ -275,6 +291,11 @@
     $('#trq').addEventListener('input', function () { clearTimeout(tt); tt = setTimeout(function () { renderTr(); if (hits.length) stepHit(1); }, 200); });
     $('#trq').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); stepHit(e.shiftKey ? -1 : 1); } });
     $('#trNext').addEventListener('click', function () { stepHit(1); });
+    $('#lang').value = lang;
+    $('#lang').addEventListener('change', function () {
+      lang = this.value; try { localStorage.setItem('dcn.lang', lang); } catch (e) {}
+      renderTr(); if (!$('#searchView').classList.contains('hide')) drawResults();
+    });
     $('#trPrev').addEventListener('click', function () { stepHit(-1); });
   }
 
